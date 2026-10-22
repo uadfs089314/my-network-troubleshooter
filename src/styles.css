@@ -1,84 +1,103 @@
-* {
-  box-sizing: border-box;
-}
+import { invoke } from '@tauri-apps/api/core';
 
-:root {
-  color-scheme: dark;
-  --bg: #0f172a;
-  --panel: #111827;
-  --panel-alt: #1f2937;
-  --accent: #38bdf8;
-  --text: #e5e7eb;
-  --muted: #94a3b8;
-  --border: rgba(148, 163, 184, 0.2);
-}
+const statusBadge = document.getElementById('status-badge');
+const issueSummary = document.getElementById('issue-summary');
+const output = document.getElementById('output');
+const latencyValue = document.getElementById('latency-value');
+const connectedValue = document.getElementById('connected-value');
+const dnsValue = document.getElementById('dns-value');
+const httpsValue = document.getElementById('https-value');
+const hostInput = document.getElementById('host-input');
 
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: linear-gradient(180deg, var(--bg), #020817);
-  color: var(--text);
-  font-family: Inter, "Segoe UI", sans-serif;
-}
+const DEFAULT_INTERVAL_MS = 15000;
 
-.app-shell {
-  width: min(760px, calc(100vw - 32px));
-  margin: 64px auto;
-}
+const setBadge = (status) => {
+  const normalized = String(status || 'neutral').toLowerCase();
+  statusBadge.className = `status-badge ${normalized}`;
 
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24px;
-}
+  if (normalized === 'healthy') {
+    statusBadge.textContent = 'Healthy';
+  } else if (normalized === 'degraded') {
+    statusBadge.textContent = 'Degraded';
+  } else if (normalized === 'issue') {
+    statusBadge.textContent = 'Issue';
+  } else {
+    statusBadge.textContent = 'Checking';
+  }
+};
 
-h1, h2, h3, p {
-  margin-top: 0;
-}
+const formatMetric = (value, suffix = '') => {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '--';
+  }
+  return `${value}${suffix}`;
+};
 
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 6px 12px;
-  background: rgba(56, 189, 248, 0.14);
-  color: var(--accent);
-  border: 1px solid rgba(56, 189, 248, 0.28);
-  font-size: 0.8rem;
-}
+const explainIssues = (report) => {
+  const tests = report?.tests || {};
+  const messages = [];
 
-.card {
-  background: rgba(17, 24, 39, 0.9);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 20px;
-  margin-bottom: 20px;
-  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.25);
-}
+  if (!tests.ping?.success) messages.push('Ping is failing');
+  if (!tests.dns?.success) messages.push('DNS is failing');
+  if (!tests.https?.success) messages.push('HTTPS/TLS is failing');
+  if (!tests.traceroute?.success) messages.push('Route is unstable');
 
-button {
-  appearance: none;
-  border: none;
-  border-radius: 10px;
-  padding: 12px 18px;
-  background: var(--accent);
-  color: #082f49;
-  font-weight: 700;
-  cursor: pointer;
-}
+  if (!messages.length) {
+    return 'No major issues detected. Keep monitoring for latency or service degradation.';
+  }
 
-button:hover {
-  filter: brightness(1.08);
-}
+  return `Priority: ${messages.join(' • ')}`;
+};
 
-.output-card pre {
-  margin: 0;
-  padding: 14px;
-  min-height: 120px;
-  background: var(--panel-alt);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  white-space: pre-wrap;
-  color: var(--muted);
-}
+const renderReport = (report) => {
+  const summary = report?.summary || 'Monitoring connectivity and looking for service issues.';
+  const status = report?.status || 'neutral';
+
+  setBadge(status);
+  issueSummary.textContent = summary;
+
+  const issueLines = [
+    `Status: ${status}`,
+    `Recommended action: ${report?.recommended_action || 'Keep monitoring and check the local gateway first.'}`,
+    `Issue summary: ${explainIssues(report)}`,
+    `Latency: ${formatMetric(report?.latency_ms, ' ms')}`,
+    `Connected: ${report?.is_connected ? 'Yes' : 'No'}`,
+    `DNS: ${report?.tests?.dns?.success ? 'OK' : 'Failed'}`,
+    `HTTPS: ${report?.tests?.https?.success ? 'OK' : 'Failed'}`,
+  ];
+
+  output.textContent = issueLines.join('\n');
+  latencyValue.textContent = formatMetric(report?.latency_ms, '');
+  connectedValue.textContent = report?.is_connected ? 'Yes' : 'No';
+  dnsValue.textContent = report?.tests?.dns?.success ? 'OK' : 'Failed';
+  httpsValue.textContent = report?.tests?.https?.success ? 'OK' : 'Failed';
+};
+
+const runMonitor = async () => {
+  const host = hostInput.value.trim() || 'example.com';
+
+  try {
+    setBadge('neutral');
+    const report = await invoke('run_connectivity_test', { host });
+    renderReport(report);
+  } catch (error) {
+    setBadge('issue');
+    issueSummary.textContent = 'Monitoring failed to update. Check the app and backend configuration.';
+    output.textContent = `Unable to run connectivity checks:\n${String(error)}`;
+    latencyValue.textContent = '--';
+    connectedValue.textContent = '--';
+    dnsValue.textContent = '--';
+    httpsValue.textContent = '--';
+  }
+};
+
+hostInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    runMonitor();
+  }
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+  runMonitor();
+  setInterval(runMonitor, DEFAULT_INTERVAL_MS);
+});
