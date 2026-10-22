@@ -1,0 +1,21 @@
+{
+  "name": "my-network-troubleshooter",
+  "version": "0.1.0",
+  "description": "Network troubleshooting application built with Tauri 2",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "start": "tauri dev"
+  },
+  "keywords": ["tauri", "network", "troubleshooter", "ping"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.4"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4"
+  }
+}
