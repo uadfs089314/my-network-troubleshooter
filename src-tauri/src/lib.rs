@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::net::{IpAddr, TcpStream};
+use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
@@ -67,7 +67,7 @@ struct ConnectivityReport {
 #[tauri::command]
 async fn ping_host(host: String) -> Result<PingResult, String> {
   let start = Instant::now();
-  
+
   let output = if cfg!(target_os = "windows") {
     let output = Command::new("ping")
       .args(["-n", "1", "-w", "2000", &host])
@@ -81,10 +81,10 @@ async fn ping_host(host: String) -> Result<PingResult, String> {
       .map_err(|e| e.to_string())?;
     String::from_utf8_lossy(&output.stdout).to_string()
   };
-  
+
   let latency = start.elapsed().as_millis() as u64;
   let success = output.contains("ttl=") || output.contains("time=");
-  
+
   Ok(PingResult {
     host,
     success,
@@ -99,10 +99,10 @@ async fn resolve_dns(host: String) -> Result<DNSResult, String> {
     .arg(&host)
     .output()
     .map_err(|e| e.to_string())?;
-  
+
   let output_str = String::from_utf8_lossy(&output.stdout).to_string();
   let mut addresses = Vec::new();
-  
+
   for line in output_str.lines() {
     if line.contains("Address:") || line.contains("address =") {
       if let Some(addr) = line.split_whitespace().last() {
@@ -112,9 +112,9 @@ async fn resolve_dns(host: String) -> Result<DNSResult, String> {
       }
     }
   }
-  
+
   let success = !addresses.is_empty();
-  
+
   Ok(DNSResult {
     host,
     success,
@@ -126,12 +126,16 @@ async fn resolve_dns(host: String) -> Result<DNSResult, String> {
 #[tauri::command]
 async fn check_port(host: String, port: u16) -> Result<PortCheckResult, String> {
   let start = Instant::now();
-  
+
   let addr = format!("{}:{}", host, port);
   let timeout = Duration::from_secs(2);
-  
-  let result = TcpStream::connect_timeout(&addr.parse().map_err(|e| e.to_string())?, timeout);
-  
+
+  let socket_addr: SocketAddr = addr
+    .parse()
+    .map_err(|e| e.to_string())?;
+
+  let result = TcpStream::connect_timeout(&socket_addr, timeout);
+
   match result {
     Ok(_) => {
       let latency = start.elapsed().as_millis() as u64;
@@ -161,20 +165,20 @@ async fn trace_route(host: String) -> Result<TracerouteResult, String> {
     "traceroute"
   };
 
-  let mut args = vec![&host];
+  let mut args: Vec<String> = vec![host.clone()];
   if !cfg!(target_os = "windows") {
-    args.insert(0, "-n");
-    args.insert(1, "-q");
-    args.insert(2, "1");
-    args.insert(3, "-w");
-    args.insert(4, "1");
-    args.insert(5, "-m");
-    args.insert(6, "15");
+    args.insert(0, "-n".to_string());
+    args.insert(1, "-q".to_string());
+    args.insert(2, "1".to_string());
+    args.insert(3, "-w".to_string());
+    args.insert(4, "1".to_string());
+    args.insert(5, "-m".to_string());
+    args.insert(6, "15".to_string());
   } else {
-    args.insert(0, "-h");
-    args.insert(1, "15");
-    args.insert(2, "-w");
-    args.insert(3, "1000");
+    args.insert(0, "-h".to_string());
+    args.insert(1, "15".to_string());
+    args.insert(2, "-w".to_string());
+    args.insert(3, "1000".to_string());
   }
 
   let output = Command::new(cmd)
