@@ -7,27 +7,53 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main class="app-shell">
+    <div class="app-shell">
       <header class="topbar">
-        <h1>MyPing</h1>
-        <span class="status-badge">Ready</span>
+        <div>
+          <p class="eyebrow">Monitoring</p>
+          <h1>MyPing</h1>
+        </div>
+        <div id="status-badge" class="status-badge neutral">Checking</div>
       </header>
 
-      <section class="card">
-        <h2>Network Troubleshooter</h2>
-        <p>
-          This is the Tauri frontend shell for the desktop app. The app logic can be
-          expanded here as needed.
-        </p>
-        <button id="ping-button">Run health check</button>
-      </section>
+      <main>
+        <section class="card monitor-header">
+          <div class="host-field">
+            <span>Target host</span>
+            <input id="host-input" type="text" value="example.com" />
+          </div>
+        </section>
 
-      <section class="card output-card">
-        <h3>Output</h3>
-        <pre id="output">Waiting for a check...</pre>
-      </section>
-    </main>
+        <section class="stats-grid">
+          <div class="stat-card card">
+            <span class="label">Latency</span>
+            <strong id="latency-value">--</strong>
+            <small>ms</small>
+          </div>
+          <div class="stat-card card">
+            <span class="label">Connection</span>
+            <strong id="connected-value">--</strong>
+            <small>status</small>
+          </div>
+          <div class="stat-card card">
+            <span class="label">DNS</span>
+            <strong id="dns-value">--</strong>
+            <small>lookup</small>
+          </div>
+          <div class="stat-card card">
+            <span class="label">HTTPS</span>
+            <strong id="https-value">--</strong>
+            <small>reachability</small>
+          </div>
+        </section>
 
-    <script src="./main.js"></script>
+        <section class="card output-card">
+          <p id="issue-summary" class="summary">Monitoring your connection and looking for service issues.</p>
+          <pre id="output">Waiting for diagnostics…</pre>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./main.js"></script>
   </body>
 </html>

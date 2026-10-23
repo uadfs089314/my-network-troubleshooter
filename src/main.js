@@ -1,62 +1,98 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Internet Troubleshooter</title>
-    <link rel="stylesheet" href="./styles.css" />
-  </head>
-  <body>
-    <main class="app-shell">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">Connection monitor</p>
-          <h1>Internet Troubleshooter</h1>
-        </div>
-        <span id="status-badge" class="status-badge neutral">Checking</span>
-      </header>
+import { invoke } from '@tauri-apps/api/core';
 
-      <section class="card intro-card">
-        <div class="monitor-header">
-          <div>
-            <h2>Connection status</h2>
-            <p id="issue-summary">Monitoring connectivity and looking for service issues.</p>
-          </div>
-          <label class="host-field">
-            <span>Target</span>
-            <input id="host-input" type="text" value="example.com" />
-          </label>
-        </div>
-      </section>
+const statusBadge = document.getElementById('status-badge');
+const issueSummary = document.getElementById('issue-summary');
+const output = document.getElementById('output');
+const latencyValue = document.getElementById('latency-value');
+const connectedValue = document.getElementById('connected-value');
+const dnsValue = document.getElementById('dns-value');
+const httpsValue = document.getElementById('https-value');
+const hostInput = document.getElementById('host-input');
 
-      <section class="stats-grid">
-        <article class="card stat-card">
-          <span class="label">Latency</span>
-          <strong id="latency-value">--</strong>
-          <small>ms</small>
-        </article>
-        <article class="card stat-card">
-          <span class="label">Connected</span>
-          <strong id="connected-value">--</strong>
-        </article>
-        <article class="card stat-card">
-          <span class="label">DNS</span>
-          <strong id="dns-value">--</strong>
-        </article>
-        <article class="card stat-card">
-          <span class="label">HTTPS</span>
-          <strong id="https-value">--</strong>
-        </article>
-      </section>
+const DEFAULT_INTERVAL_MS = 15000;
 
-      <section class="card output-card">
-        <div class="section-header">
-          <h3>What to look at first</h3>
-        </div>
-        <pre id="output">Monitoring your connection and surface-level issues.</pre>
-      </section>
-    </main>
+const setBadge = (status = 'neutral') => {
+  const normalized = status.toLowerCase();
+  statusBadge.className = `status-badge ${normalized}`;
+  if (normalized === 'healthy') {
+    statusBadge.textContent = 'Healthy';
+  } else if (normalized === 'degraded') {
+    statusBadge.textContent = 'Degraded';
+  } else if (normalized === 'issue') {
+    statusBadge.textContent = 'Issue';
+  } else {
+    statusBadge.textContent = 'Checking';
+  }
+};
 
-    <script type="module" src="./main.js"></script>
-  </body>
-</html>
+const formatMetric = (value, suffix = '') => {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '--';
+  }
+  return `${value}${suffix}`;
+};
+
+const explainIssues = (report = {}) => {
+  const { tests = {} } = report;
+  const messages = [];
+
+  if (!tests.ping?.success) messages.push('Ping is failing');
+  if (!tests.dns?.success) messages.push('DNS is failing');
+  if (!tests.https?.success) messages.push('HTTPS/TLS is failing');
+  if (!tests.traceroute?.success) messages.push('Route is unstable');
+
+  if (messages.length === 0) {
+    return 'No major issues detected. Keep monitoring for latency or service degradation.';
+  }
+
+  return `Priority: ${messages.join(' • ')}`;
+};
+
+const renderReport = (report = {}) => {
+  const summary = report.summary || 'Monitoring your connection and looking for service issues.';
+  const status = report.status || 'neutral';
+
+  setBadge(status);
+  issueSummary.textContent = summary;
+
+  output.textContent = [
+    `Status: ${status}`,
+    `Recommended action: ${report.recommended_action || 'Keep monitoring and check the local gateway first.'}`,
+    `Issue summary: ${explainIssues(report)}`,
+    `Latency: ${formatMetric(report.latency_ms, ' ms')}`,
+    `Connected: ${report.is_connected ? 'Yes' : 'No'}`,
+    `DNS: ${report.tests?.dns?.success ? 'OK' : 'Failed'}`,
+    `HTTPS: ${report.tests?.https?.success ? 'OK' : 'Failed'}`,
+  ].join('\n');
+
+  latencyValue.textContent = formatMetric(report.latency_ms, '');
+  connectedValue.textContent = report.is_connected ? 'Yes' : 'No';
+  dnsValue.textContent = report.tests?.dns?.success ? 'OK' : 'Failed';
+  httpsValue.textContent = report.tests?.https?.success ? 'OK' : 'Failed';
+};
+
+const runMonitor = async () => {
+  const host = hostInput.value.trim() || 'example.com';
+
+  try {
+    statusBadge.textContent = 'Checking';
+    statusBadge.className = 'status-badge neutral';
+    const report = await invoke('run_connectivity_test', { host });
+    renderReport(report);
+  } catch (error) {
+    issueSummary.textContent = 'Monitoring failed to update. Check the app and backend configuration.';
+    output.textContent = `Unable to run connectivity checks:\n${String(error)}`;
+    setBadge('issue');
+  }
+};
+
+hostInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    runMonitor();
+  }
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+  runMonitor();
+  setInterval(runMonitor, DEFAULT_INTERVAL_MS);
+});
